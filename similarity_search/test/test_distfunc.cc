@@ -20,6 +20,7 @@
 #include <iostream>
 #include <memory>
 #include <cmath>
+#include <spacefactory.h>
 
 #include "bunit.h"
 #include "space.h"
@@ -723,9 +724,12 @@ bool TestSparseAngularDistanceAgree(const string& dataFile, size_t N, size_t Rep
 
     ObjectVector                                 elemsFast;
     ObjectVector                                 elemsReg;
+    vector<string>                               tmp;
 
-    spaceFast->ReadDataset(elemsFast, NULL, dataFile.c_str(), N);
-    spaceReg->ReadDataset(elemsReg, NULL, dataFile.c_str(), N);
+    unique_ptr<DataFileInputState> inpStateFast(spaceFast->ReadDataset(elemsFast, tmp, dataFile, N));
+    spaceFast->UpdateParamsFromFile(*inpStateFast);
+    unique_ptr<DataFileInputState> inpStateReg(spaceReg->ReadDataset(elemsReg, tmp, dataFile, N));
+    spaceReg->UpdateParamsFromFile(*inpStateReg);
 
     CHECK(elemsFast.size() == elemsReg.size());
 
@@ -769,9 +773,12 @@ bool TestSparseCosineSimilarityAgree(const string& dataFile, size_t N, size_t Re
 
     ObjectVector                                 elemsFast;
     ObjectVector                                 elemsReg;
+    vector<string>                               tmp;
 
-    spaceFast->ReadDataset(elemsFast, NULL, dataFile.c_str(),  N); 
-    spaceReg->ReadDataset(elemsReg, NULL, dataFile.c_str(),  N); 
+    unique_ptr<DataFileInputState> inpStateFast(spaceFast->ReadDataset(elemsFast, tmp, dataFile,  N)); 
+    spaceFast->UpdateParamsFromFile(*inpStateFast);
+    unique_ptr<DataFileInputState> inpStateReg(spaceReg->ReadDataset(elemsReg, tmp, dataFile,  N)); 
+    spaceReg->UpdateParamsFromFile(*inpStateReg);
 
     CHECK(elemsFast.size() == elemsReg.size());
 
@@ -779,8 +786,8 @@ bool TestSparseCosineSimilarityAgree(const string& dataFile, size_t N, size_t Re
 
     bool bug = false;
 
-    float maxRelDiff = 1e-6f;
-    float maxAbsDiff = 1e-6f;
+    float maxRelDiff = 1e-5f;
+    float maxAbsDiff = 1e-5f;
 
     for (size_t j = Rep; j < N; ++j) 
     for (size_t k = j - Rep; k < j; ++k) {
@@ -805,6 +812,169 @@ bool TestSparseCosineSimilarityAgree(const string& dataFile, size_t N, size_t Re
     return true;
 }
 
+bool TestSparseNegativeScalarProductAgree(const string& dataFile, size_t N, size_t Rep) {
+    typedef float T;
+
+    unique_ptr<SpaceSparseNegativeScalarProductFast>     spaceFast(new SpaceSparseNegativeScalarProductFast());
+    unique_ptr<SpaceSparseNegativeScalarProduct<T>>      spaceReg (new SpaceSparseNegativeScalarProduct<T>());
+
+    ObjectVector                                 elemsFast;
+    ObjectVector                                 elemsReg;
+    vector<string>                               tmp;
+
+    unique_ptr<DataFileInputState> inpStateFast(spaceFast->ReadDataset(elemsFast, tmp, dataFile,  N)); 
+    spaceFast->UpdateParamsFromFile(*inpStateFast);
+    unique_ptr<DataFileInputState> inpStateReg(spaceReg->ReadDataset(elemsReg, tmp, dataFile,  N)); 
+    spaceReg->UpdateParamsFromFile(*inpStateReg);
+
+    CHECK(elemsFast.size() == elemsReg.size());
+
+    N = min(N, elemsReg.size());
+
+    bool bug = false;
+
+    float maxRelDiff = 1e-6f;
+    float maxAbsDiff = 1e-6f;
+
+    for (size_t j = Rep; j < N; ++j) 
+    for (size_t k = j - Rep; k < j; ++k) {
+        float val1 = spaceFast->IndexTimeDistance(elemsFast[k], elemsFast[j]);
+        float val2 = spaceReg->IndexTimeDistance(elemsReg[k], elemsReg[j]);
+
+        float AbsDiff1 = fabs(val1 - val2);
+        float RelDiff1 = AbsDiff1/max(max(fabs(val1),fabs(val2)),T(1e-18));
+
+        if (RelDiff1 > maxRelDiff && AbsDiff1 > maxAbsDiff) {
+            cerr << "Bug fast vs non-fast negative scalar/dot product " <<
+            " val1 = " << val1 << " val2 = " << val2 << 
+            " Diff: " << (val1 - val2) << 
+            " RelDiff1: " << RelDiff1 << 
+            " AbsDiff1: " << AbsDiff1 << endl;
+            bug = true;
+        }
+
+        if (bug) return false;
+    }
+
+    return true;
+}
+
+bool TestSparseQueryNormNegativeScalarProductAgree(const string& dataFile, size_t N, size_t Rep) {
+    typedef float T;
+
+    unique_ptr<SpaceSparseQueryNormNegativeScalarProductFast>     spaceFast(new SpaceSparseQueryNormNegativeScalarProductFast());
+    unique_ptr<SpaceSparseQueryNormNegativeScalarProduct<T>>      spaceReg (new SpaceSparseQueryNormNegativeScalarProduct<T>());
+
+    ObjectVector                                 elemsFast;
+    ObjectVector                                 elemsReg;
+    vector<string>                               tmp;
+
+    unique_ptr<DataFileInputState> inpStateFast(spaceFast->ReadDataset(elemsFast, tmp, dataFile,  N));
+    spaceFast->UpdateParamsFromFile(*inpStateFast);
+    unique_ptr<DataFileInputState> inpStateReg(spaceReg->ReadDataset(elemsReg, tmp, dataFile,  N));
+    spaceReg->UpdateParamsFromFile(*inpStateReg);
+
+    CHECK(elemsFast.size() == elemsReg.size());
+
+    N = min(N, elemsReg.size());
+
+    bool bug = false;
+
+    float maxRelDiff = 1e-6f;
+    float maxAbsDiff = 1e-6f;
+
+    for (size_t j = Rep; j < N; ++j)
+        for (size_t k = j - Rep; k < j; ++k) {
+            float val1 = spaceFast->IndexTimeDistance(elemsFast[k], elemsFast[j]);
+            float val2 = spaceReg->IndexTimeDistance(elemsReg[k], elemsReg[j]);
+
+            float AbsDiff1 = fabs(val1 - val2);
+            float RelDiff1 = AbsDiff1/max(max(fabs(val1),fabs(val2)),T(1e-18));
+
+            if (RelDiff1 > maxRelDiff && AbsDiff1 > maxAbsDiff) {
+                cerr << "Bug fast vs non-fast QUERY-NORMALIZED negative scalar/dot product " <<
+                " val1 = " << val1 << " val2 = " << val2 <<
+                " Diff: " << (val1 - val2) <<
+                " RelDiff1: " << RelDiff1 <<
+                " AbsDiff1: " << AbsDiff1 << endl;
+                bug = true;
+            }
+
+            if (bug) return false;
+        }
+
+    return true;
+}
+
+// Limitation: this is only for spaces without params
+bool TestPivotIndex(const string& spaceName,
+                    bool useDummyIndex,
+                    const string& dataFile, size_t dataQty,
+                    const string& pivotFile, size_t pivotQty) {
+
+  LOG(LIB_INFO) << "space: " << spaceName << " real pivot index?: " << !useDummyIndex << endl <<
+                   " dataFile: " << dataFile << endl <<
+                   " pivotFile: " << pivotFile;
+  try {
+    typedef float T;
+
+    AnyParams emptyParams;
+
+    unique_ptr<Space<T>> space(SpaceFactoryRegistry<T>::Instance().CreateSpace(spaceName, emptyParams));
+
+    ObjectVector                                 data;
+    ObjectVector                                 pivots;
+    vector<string>                               tmp;
+
+    float maxRelDiff = 1e-6f;
+    float maxAbsDiff = 1e-6f;
+
+    unique_ptr<DataFileInputState> inpStateFast(space->ReadDataset(data, tmp, dataFile,  dataQty));
+    space->UpdateParamsFromFile(*inpStateFast);
+    space->ReadDataset(pivots, tmp, pivotFile, pivotQty);
+
+    unique_ptr<PivotIndex<T>>  pivIndx(useDummyIndex ? 
+      new DummyPivotIndex<T>(*space, pivots)
+       :
+      space->CreatePivotIndex(pivots,
+                              0 /* Let's not test using the hashing trick here, b/c distances would be somewhat different */));
+
+    for (size_t did = 0; did < dataQty; ++did) {
+      vector<T> vDst;
+      pivIndx->ComputePivotDistancesIndexTime(data[did], vDst);
+      CHECK_MSG(vDst.size() == pivotQty, "ComputePivotDistancesIndexTime returns incorrect # of elements different from the # of pivots");
+
+      for (size_t pid = 0; pid < pivotQty; ++pid) {
+        T val2 = space->IndexTimeDistance(pivots[pid], data[did]);
+        T val1 = vDst[pid];
+
+        float AbsDiff1 = fabs(val1 - val2);
+        float RelDiff1 = AbsDiff1/max(max(fabs(val1),fabs(val2)),T(1e-18));
+
+        if (RelDiff1 > maxRelDiff && AbsDiff1 > maxAbsDiff) {
+            cerr << "Bug in fast computation of all-pivot distance, " << 
+              " space: " << spaceName << " real pivot index?: " << !useDummyIndex << endl <<
+              " dataFile: " << dataFile << endl <<
+              " pivotFile: " << pivotFile << endl <<
+              " data index: " << did << " pivot index: " << pid << endl <<
+              " val1 = " << val1 << " val2 = " << val2 <<
+              " Diff: " << (val1 - val2) <<
+              " RelDiff1: " << RelDiff1 <<
+              " AbsDiff1: " << AbsDiff1 << endl;
+            return false;
+        }
+      }
+    }
+  } catch (const exception& e) {
+    LOG(LIB_INFO) << "Got exception while testing: " << e.what();
+    return false;
+  }
+  return true;
+}
+
+
+
+
 #ifdef DISABLE_LONG_TESTS
 TEST(DISABLE_TestAgree) {
 #else
@@ -824,14 +994,28 @@ TEST(TestAgree) {
 
     nTest++;
     nFail += !TestSparseCosineSimilarityAgree(sampleDataPrefix + "sparse_wiki_5K.txt", 1000, 200);
-   
-    /* 
-     * 32 should be more than enough for almost all methods,
-     * where loop-unrolling  includes at most 16 distance computations.
-     *
-     * Bit-Hamming is an exception.
-     * 
-     */
+
+
+    nTest++;
+    nFail += !TestSparseNegativeScalarProductAgree(sampleDataPrefix + "sparse_5K.txt", 1000, 200);
+
+    nTest++;
+    nFail += !TestSparseNegativeScalarProductAgree(sampleDataPrefix + "sparse_wiki_5K.txt", 1000, 200);
+
+    nTest++;
+    nFail += !TestSparseQueryNormNegativeScalarProductAgree(sampleDataPrefix + "sparse_5K.txt", 1000, 200);
+
+    nTest++;
+    nFail += !TestSparseQueryNormNegativeScalarProductAgree(sampleDataPrefix + "sparse_wiki_5K.txt", 1000, 200);
+
+
+  /*
+   * 32 should be more than enough for almost all methods,
+   * where loop-unrolling  includes at most 16 distance computations.
+   *
+   * Bit-Hamming is an exception.
+   *
+   */
     for (unsigned dim = 1; dim <= 1024; dim+=2) {
         LOG(LIB_INFO) << "Dim = " << dim;
 
@@ -912,6 +1096,39 @@ TEST(TestAgree) {
 
     EXPECT_EQ(0, nFail);
 }
+
+#ifdef DISABLE_LONG_TESTS
+TEST(DISABLE_TestAgreePivotIndex) {
+#else
+TEST(TestAgreePivotIndex) {
+#endif
+    int nTest  = 0;
+    int nFail = 0;
+
+    const size_t dataQty = 1000;
+    const size_t pivotQty = 100;
+
+    vector<string> vDataFiles = {"sparse_5K.txt", "sparse_wiki_5K.txt"}; 
+    vector<string> vSpaces = {SPACE_SPARSE_COSINE_SIMILARITY_FAST, SPACE_SPARSE_ANGULAR_DISTANCE_FAST, 
+                              SPACE_SPARSE_NEGATIVE_SCALAR_FAST, SPACE_SPARSE_QUERY_NORM_NEGATIVE_SCALAR_FAST};
+    const string pivotFile = "sparse_pivots1K_termQty5K_maxId_100K.txt";
+
+    for (string spaceName : vSpaces)
+      for (string dataFile : vDataFiles) {
+        // 1. test with a dummy pivot index
+        nTest++;
+        nFail += !TestPivotIndex(spaceName, true, sampleDataPrefix + dataFile, dataQty, sampleDataPrefix + pivotFile, pivotQty);
+
+        // 2. test with a real pivot index
+        nTest++;
+        nFail += !TestPivotIndex(spaceName, false, sampleDataPrefix + dataFile, dataQty, sampleDataPrefix + pivotFile, pivotQty);
+    }
+
+    LOG(LIB_INFO) << nTest << " (sub) tests performed " << nFail << " failed";
+
+    EXPECT_EQ(0, nFail);
+}
+
 
 }  // namespace similarity
 

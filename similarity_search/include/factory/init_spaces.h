@@ -27,8 +27,11 @@
 #include "factory/space/space_scalar.h"
 #include "factory/space/space_sparse_lp.h"
 #include "factory/space/space_sparse_scalar.h"
-#include "factory/space/space_savch.h"
-#if !defined(_MSC_VER)
+#include "factory/space/space_word_embed.h"
+#include "factory/space/space_ab_diverg.h"
+#include "factory/space/space_renyi_diverg.h"
+#include "factory/space/space_sparse_jaccard.h"
+#if defined(WITH_EXTRAS)
 #include "factory/space/space_sqfd.h"
 #endif
 
@@ -77,6 +80,10 @@ inline void initSpaces() {
   REGISTER_SPACE_CREATOR(float,  SPACE_JS_METR_FAST_APPROX, CreateJSMetricFastPrecompApprox)
   REGISTER_SPACE_CREATOR(double, SPACE_JS_METR_FAST_APPROX, CreateJSMetricFastPrecompApprox)
 
+  // Word embeddings
+  REGISTER_SPACE_CREATOR(float,  SPACE_WORD_EMBED,  CreateWordEmbed)
+  REGISTER_SPACE_CREATOR(double, SPACE_WORD_EMBED,  CreateWordEmbed)
+
   // LP spaces
   REGISTER_SPACE_CREATOR(float,  SPACE_L,  CreateL)
   REGISTER_SPACE_CREATOR(double, SPACE_L,  CreateL)
@@ -93,6 +100,8 @@ inline void initSpaces() {
   REGISTER_SPACE_CREATOR(double, SPACE_COSINE_SIMILARITY, CreateCosineSimilarity)
   REGISTER_SPACE_CREATOR(float,  SPACE_ANGULAR_DISTANCE, CreateAngularDistance)
   REGISTER_SPACE_CREATOR(double, SPACE_ANGULAR_DISTANCE, CreateAngularDistance)
+  REGISTER_SPACE_CREATOR(float,  SPACE_NEGATIVE_SCALAR, CreateNegativeScalarProduct)
+  REGISTER_SPACE_CREATOR(double, SPACE_NEGATIVE_SCALAR, CreateNegativeScalarProduct)
 
   // Sparse
   REGISTER_SPACE_CREATOR(float,  SPACE_SPARSE_L, CreateSparseL)
@@ -108,14 +117,18 @@ inline void initSpaces() {
   REGISTER_SPACE_CREATOR(double, SPACE_SPARSE_COSINE_SIMILARITY, CreateSparseCosineSimilarity)
   REGISTER_SPACE_CREATOR(float,  SPACE_SPARSE_ANGULAR_DISTANCE, CreateSparseAngularDistance)
   REGISTER_SPACE_CREATOR(double, SPACE_SPARSE_ANGULAR_DISTANCE, CreateSparseAngularDistance)
+  REGISTER_SPACE_CREATOR(float,  SPACE_SPARSE_NEGATIVE_SCALAR, CreateSparseNegativeScalarProduct)
+  REGISTER_SPACE_CREATOR(double, SPACE_SPARSE_QUERY_NORM_NEGATIVE_SCALAR, CreateSparseQueryNormNegativeScalarProduct)
 
   REGISTER_SPACE_CREATOR(float,  SPACE_SPARSE_COSINE_SIMILARITY_FAST, CreateSparseCosineSimilarityFast)
   REGISTER_SPACE_CREATOR(float,  SPACE_SPARSE_ANGULAR_DISTANCE_FAST, CreateSparseAngularDistanceFast)
+  REGISTER_SPACE_CREATOR(float,  SPACE_SPARSE_NEGATIVE_SCALAR_FAST, CreateSparseNegativeScalarProductFast)
+  REGISTER_SPACE_CREATOR(float,  SPACE_SPARSE_QUERY_NORM_NEGATIVE_SCALAR_FAST, CreateSparseQueryNormNegativeScalarProductFast)
 
+  REGISTER_SPACE_CREATOR(float,  SPACE_SPARSE_JACCARD,  CreateSpaceSparseJaccard)
+  REGISTER_SPACE_CREATOR(double, SPACE_SPARSE_JACCARD,  CreateSpaceSparseJaccard)
 
-  REGISTER_SPACE_CREATOR(float,  "savch",  CreateSavch)
-
-#if !defined(_MSC_VER)
+#if defined(WITH_EXTRAS)
   // Signature Quadratic Form Distance
   REGISTER_SPACE_CREATOR(float,  SPACE_SQFD_HEURISTIC_FUNC, CreateSqfdHeuristicFunc)
   REGISTER_SPACE_CREATOR(double, SPACE_SQFD_HEURISTIC_FUNC, CreateSqfdHeuristicFunc)
@@ -124,6 +137,13 @@ inline void initSpaces() {
   REGISTER_SPACE_CREATOR(float,  SPACE_SQFD_GAUSSIAN_FUNC, CreateSqfdGaussianFunc)
   REGISTER_SPACE_CREATOR(double, SPACE_SQFD_GAUSSIAN_FUNC, CreateSqfdGaussianFunc)
 #endif
+
+  REGISTER_SPACE_CREATOR(float,  SPACE_AB_DIVERG,  CreateAlphaBetaDiverg)
+  REGISTER_SPACE_CREATOR(double, SPACE_AB_DIVERG,  CreateAlphaBetaDiverg)
+
+  REGISTER_SPACE_CREATOR(float,  SPACE_RENYI_DIVERG,  CreateRenyiDiverg)
+  REGISTER_SPACE_CREATOR(double, SPACE_RENYI_DIVERG,  CreateRenyiDiverg)
+
 }
 
 }

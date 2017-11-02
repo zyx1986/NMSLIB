@@ -1,43 +1,101 @@
-Non-Metric Space Library (NMSLIB)
+[![Pypi version](https://img.shields.io/pypi/v/nmslib.svg)](http://pypi.python.org/pypi/nmslib)
+[![Build Status](https://travis-ci.org/searchivarius/nmslib.svg?branch=master)](https://travis-ci.org/searchivarius/nmslib)
+[![Windows Build Status](https://ci.appveyor.com/api/projects/status/wd63b9doe7xco81t/branch/master?svg=true)](https://ci.appveyor.com/project/searchivarius/nmslib)
+[![Join the chat at https://gitter.im/nmslib/Lobby](https://badges.gitter.im/nmslib/Lobby.svg)](https://gitter.im/nmslib/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
+Non-Metric Space Library (NMSLIB) 
 =================
-Non-Metric Space Library is a cross-platform similarity search library and a toolkit for evaluation of similarity search methods.
-The goal of the project is to create an effective and **comprehensive** toolkit for searching in **generic non-metric** spaces.
-Why do we care about being comprehensive? Because no single method is likely to be sufficient in all cases.
-It should also be easy to add new implementations and compare them against existing baselines. These considerations were also factored in the design.
+The latest **pre**-release is [1.6](https://github.com/searchivarius/nmslib/releases/tag/v1.6). Note that the manual is not updated to reflect 1.6 changes. In particular, we changed the build procedure for Windows. Also note that the manual targets primiarily developers who will extend the library. For most other folks, [Python binding docs should be sufficient](https://searchivarius.github.io/nmslib/).
+-----------------
+Non-Metric Space Library (NMSLIB) is an **efficient** cross-platform similarity search library and a toolkit for evaluation of similarity search methods. The core-library does **not** have any third-party dependencies.
 
-Because exact solutions are hardly efficient in high dimensions and/or non-metric spaces, the main focus is on **approximate** methods. 
-Some of the implemented approaches are quite efficient. For example, according to the results of [a public evaluation](https://github.com/erikbern/ann-benchmarks), our implementation of the SW-graph outperforms other methods in most cases. 
+The goal of the project is to create an effective and **comprehensive** toolkit for searching in **generic non-metric** spaces. Being comprehensive is important, because no single method is likely to be sufficient in all cases. Also note that exact solutions are hardly efficient in high dimensions and/or non-metric spaces. Hence, the main focus is on **approximate** methods.
 
+NMSLIB is an **extendible library**, which means that is possible to add new search methods and distance functions. NMSLIB can be used directly in C++ and Python (via Python bindings). In addition, it is also possible to build a query server, which can be used from Java (or other languages supported by Apache Thrift). Java has a native client, i.e., it works on many platforms without requiring a C++ library to be installed.
 
-**Contributors** (including people whose code we incorporated): Bilegsaikhan Naidan, Leonid Boytsov, Lawrence Cayton, Wei Dong, Avrelin Nikita, Alexander Ponomarenko, Yury Malkov, Daniel Lemire.
+**Main developers** : Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, David Novak, Ben Frederickson.
 
-Leo(nid) Boytsov is a maintainer.
+Other contributors:  Lawrence Cayton, Wei Dong, Avrelin Nikita, Ben Frederickson, Dmitry Yashunin, Bob Poekert, @orgoro, Maxim Andreev, Daniel Lemire, Nathan Kurz, Alexander Ponomarenko.
 
-**Should you decide to modify the library (and, perhaps, create a pull request), please, use the [develoment branch](https://github.com/searchivarius/NonMetricSpaceLib/tree/develop)**.
+To acknowledge the use of the library, you could provide a link to this repository and/or cite our SISAP paper [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/conf/sisap/BoytsovN13). Some other related papers are listed in the end.
+
+Leo(nid) Boytsov is a maintainer. Leo is supported by the [Open Advancement of Question Answering Systems (OAQA) group](https://github.com/oaqa) and the following NSF grant #1618159: "[Matching and Ranking via Proximity Graphs: Applications to Question Answering and Beyond](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1618159&HistoricalAwards=false)". Bileg was supported by the [iAd Center](https://web.archive.org/web/20160306011711/http://www.iad-center.com/).
+
+**Should you decide to modify the library (and, perhaps, create a pull request), please, use the [develoment branch](https://github.com/searchivarius/NonMetricSpaceLib/tree/develop)**. For generic questions/inquiries, please, use Gitter (see the badge above). Bug reports should be submitted as GitHub issues.
+
+NMSLIB is generic yet fast!
+=================
+Even though our methods are generic (see e.g., evaluation results in [Naidan and Boytsov 2015](http://boytsov.info/pubs/p2332-naidan-arxiv.pdf)), they often outperform specialized methods for the Euclidean and/or angular distance (i.e., for the cosine similarity).
+Below are the results (as of May 2016) of NMSLIB compared to the best implementations participated in [a public evaluation code-named ann-benchmarks](https://github.com/erikbern/ann-benchmarks). Our main competitors are: 
+
+1. A popular library [Annoy](https://github.com/spotify/annoy), which uses a forest of trees (older version used random-projection trees, the new one seems to use a hierarchical 2-means).
+2. A new library [FALCONN](https://github.com/FALCONN-LIB/FALCONN), which is a highly-optimized implementation of the multiprobe LSH.  It uses a novel type of random projections based on the fast Hadamard transform.
+
+The benchmarks were run on a c4.2xlarge instance on EC2 using a previously unseen subset of 5K queries. The benchmarks employ the following data sets:
+
+1. [GloVe](http://nlp.stanford.edu/projects/glove/) : 1.2M 100-dimensional word embeddings trained on Tweets 
+2. 1M of 128-dimensional [SIFT features](http://corpus-texmex.irisa.fr/)  
+
+As of **May 2016** results are:
+
+<table  border="0" width="100%" style="border:none">
+<tr width="100%" border="0" style="border:none">
+<td border="0" align="center" style="border:none">
+1.19M 100d GloVe, cosine similarity.
+<img src="https://raw.githubusercontent.com/searchivarius/nmslib/master/manual/figures/glove.png" width="400">
+</td>
+<td border="0"  align="center" style="border:none">
+1M 128d SIFT features, Euclidean distance:
+<img src="https://raw.githubusercontent.com/searchivarius/nmslib/master/manual/figures/sift.png" width="400">
+</td>
+</tr></table>
+
+What's new in version 1.6 ([see this page for more details](https://github.com/searchivarius/nmslib/releases/tag/v1.6) )
+-----------------------
+
+1. Improved portability (Can now be built on MACOS)
+2. Easier build: core NMSLIB has no dependencies
+3. Improved Python bindings: dense, sparse, and generic bindings are now in the single module! We also have batch addition and querying functions.
+3. New baselines, including [FALCONN library](https://github.com/FALCONN-LIB/FALCONN)
+4. New spaces (Renyi-divergence, alpha-beta divergence, sparse inner product)
+5. We changed the semantics of boolean command line options: they now have to accept a numerical value (0 or 1).
 
 General information
 -----------------------
 
-A detailed description is given [in the manual](http://arxiv.org/abs/1508.05470). The manual also contains instructions for building under Linux and Windows, extending the library, as well as for debugging the code using Eclipse.
+A detailed description is given [in the manual](manual/manual.pdf). The manual also contains instructions for building under Linux and Windows, extending the library, as well as for debugging the code using Eclipse. Note that the manual is not fully updated to reflect 1.6 changes. Also note that the manual targets primiarily developers who will extend the library. **For most other folks**, [Python binding docs should be sufficient](https://searchivarius.github.io/nmslib/).
 
 Most of this code is released under the
 Apache License Version 2.0 http://www.apache.org/licenses/.
 
-To acknowledge the use of the library, you could provide a link to this repository and/or cite our SISAP paper [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/conf/sisap/BoytsovN13). Some other related papers are listed in the end.
-
-The LSHKIT, which is embedded in our library, is distributed under the GNU General Public License, see http://www.gnu.org/licenses/. The k-NN graph construction algorithm *NN-Descent* due to Dong et al. 2011 (see the links below), which is also embedded in our library, seems to be covered by a free-to-use license, similar to Apache 2.
+* The LSHKIT, which is embedded in our library, is distributed under the GNU General Public License, see http://www.gnu.org/licenses/. 
+* The k-NN graph construction algorithm *NN-Descent* due to Dong et al. 2011 (see the links below), which is also embedded in our library, seems to be covered by a free-to-use license, similar to Apache 2.
+* FALCONN library's licence is MIT.
 
 Prerequisites
 -----------------------
 
-1. A modern compiler that supports C++11: G++ 4.7, Intel compiler 14, Clang 3.4, or Visual Studio 14 (version 12 can also be used, but the project fileds need to be downgraded).
-2. **64-bit** Linux is recommended, but most of our code builds on **64-bit** Windows as well.
-3. Boost (dev version). For Windows, the core library and the standalone sample application do not require Boost.
-4. Only for Linux: CMake (GNU make is also required) 
-5. Only for Linux: GNU scientific library (dev version)
-6. Only for Linux: Eigen (dev version)
-6. An Intel or AMD processor that supports SSE 4.2 is recommended
+1. A modern compiler that supports C++11: G++ 4.7, Intel compiler 14, Clang 3.4, or Visual Studio 14 (version 12 can probably be used as well, but the project files need to be downgraded).
+2. **64-bit** Linux is recommended, but most of our code builds on **64-bit** Windows and MACOS as well. 
+3. Only for Linux/MACOS: CMake (GNU make is also required) 
+4. An Intel or AMD processor that supports SSE 4.2 is recommended
+5. Extended version of the library requires a development version of the following libraries: Boost, GNU scientific library, and Eigen3.
 
+To install additional prerequisite packages on Ubuntu, type the following
+```
+sudo apt-get install libboost-all-dev libgsl0-dev libeigen3-dev
+```
+
+Limitations
+-----------------------
+
+1. Currently only static data sets are supported
+2. HNSW does not work with Clang
+3. HNSW currently duplicates memory to create optimized indices
+4. Non-optimized HNSW indices cannot be saved (for spaces other than cosine and Euclidean)
+5. Range/threshold search is not supported by many methods including SW-graph/HNSW
+
+We plan to resolve these issues in the future.
 
 Quick start on Linux
 -----------------------
@@ -47,46 +105,62 @@ To compile, go to the directory **similarity_search** and type:
 cmake .
 make  
 ```
-
-Note that the directory **similarity_search** contains an Eclipse project that can be imported into [The Eclipse IDE for C/C++ Developers](http://www.eclipse.org/ide/).  A more detailed description is given in [in the manual](http://arxiv.org/abs/1508.05470).  
-
-Examples of using the software can be found in the directory [sample_scripts](sample_scripts). A good starting point is a script [sample_scripts/sample_run.sh](sample_scripts/sample_run.sh). This script uses small data sets stored in this repository. You can also download almost every data set used in our evaluations (see the section **Data sets** below). The downloaded data needs to be decompressed (you may need 7z, gzip, and bzip2). Then, copy data files to a directory of choice and set the environment variable:  
-
+To build an extended version (need extra library):
 ```bash
-export DATA_DIR=[path to the chosen directory with data files]
+cmake . -DWITH_EXTRAS=1
+make  
 ```
+
+You can also download almost every data set used in our previous evaluations (see the section **Data sets** below). The downloaded data needs to be decompressed (you may need 7z, gzip, and bzip2). Old experimental scripts can be found in the directory [previous_releases_scripts](previous_releases_scripts). However, they will work only with previous releases.
 
 Note that the benchmarking utility **supports caching of ground truth data**, so that ground truth data is not recomputed every time this utility is re-run on the same data set.
 
-Python bindings (only on Linux)
+Query server (Linux-only)
 -----------------------
-
-
-In this release, we implemented basic Python bindings (for Linux and Python 2.7). Currently, only dense vector spaces are supported. To build the bindings, build the library first. Then, change the directory to
-[python_bindings](python_bindings) and type:
-```make
-sudo make install
+The query server requires Apache Thrift. We used Apache Thrift 0.9.2, but, perhaps, newer versions will work as well.  
+To install Apache Thrift, you need to [build it from source](https://thrift.apache.org/manual/BuildingFromSource).
+This may require additional libraries. On Ubuntu they can be installed as follows:
+```
+sudo apt-get install libboost-dev libboost-test-dev libboost-program-options-dev libboost-system-dev libboost-filesystem-dev libevent-dev automake libtool flex bison pkg-config g++ libssl-dev libboost-thread-dev make
 ```
 
-For an example of using our library in Python, see the script [test_nmslib.py](python_bindings/test_nmslib.py).
+After Apache Thrift is installed, you need to build the library itself. Then, change the directory
+to [query_server/cpp_client_server](query_server/cpp_client_server) and type ``make`` (the makefile may need to be modified,
+if Apache Thrift is installed to a non-standard location).
+The query server has a similar set of parameters to the benchmarking utility ``experiment``.  For example,
+you can start the server as follows:
+```
+ ./query_server -i ../../sample_data/final8_10K.txt -s l2 -m sw-graph -c NN=10,efConstruction=200,initIndexAttempts=1 -p 10000
+```
+There are also three sample clients implemented in [C++](query_server/cpp_client_server), [Python](query_server/python_client/),
+and [Java](query_server/java_client/). 
+A client reads a string representation of a query object from the standard stream.
+The format is the same as the format of objects in a data file. 
+Here is an example of searching for ten vectors closest to the first data set vector (stored in row one) of a provided sample data file:
+```
+export DATA_FILE=../../sample_data/final8_10K.txt
+head -1 $DATA_FILE | ./query_client -p 10000 -a localhost  -k 10
+```
+It is also possible to generate client classes for other languages supported by Thrift from [the interface definition file](query_server/protocol.thrift), e.g., for C#. To this end, one should invoke the thrift compiler as follows:
+```
+thrift --gen csharp  protocol.thrift
+```
+For instructions on using generated code, please consult the [Apache Thrift tutorial](https://thrift.apache.org/tutorial/).
+
+Python bindings
+-----------------------
+
+We provide Python bindings for Python 2.7+ and Python 3.5+, which have been tested under Linux, OSX and Windows. To install:
+
+```
+pip install nmslib
+```
+
+For examples of using the Python API, please, see the README in the [python_bindings](python_bindings) folder. [More detailed documentation is also available](https://searchivarius.github.io/nmslib/) (thanks to Ben Frederickson).
 
 Quick start on Windows
 -----------------------
-Building on Windows is straightforward.
-Download [Visual Studio 2015 Express for Desktop](https://www.visualstudio.com/en-us/downloads/download-visual-studio-vs.aspx). 
-Download and install respective [Boost binaries (**64-bit version 59**)](http://sourceforge.net/projects/boost/files/boost-binaries/1.59.0/boost_1_59_0-msvc-14.0-64.exe/download). Please, use the **default** installation directory on disk ``c:`` (otherwise, it will be necessary to update project files).
-
-Afterwards, you can simply use the provided  [Visual Studio solution file](similarity_search/NonMetricSpaceLib.sln).
-The solution file references several project (\*.vcxproj) files: 
-[NonMetricSpaceLib.vcxproj](similarity_search/src/NonMetricSpaceLib.vcxproj)
-is the main project file that is used to build the library itself.
-The output is stored in the folder **similarity_search\x64**.
-
-Also note that the core library, the test utilities,
- as well as examples of the standalone applications (projects **sample_standalone_app1**
-and **sample_standalone_app2**)
-can be built **without installing Boost**. 
-
+Building on Windows requires [Visual Studio 2015 Express for Desktop](https://www.visualstudio.com/en-us/downloads/download-visual-studio-vs.aspx) and [CMake for Windows](https://cmake.org/download/). First, generate Visual Studio solution file for 64 bit architecture using CMake **GUI**. You have to specify both the platform and the version of Visual Studio. Then, the generated solution can be built using Visual Studio. **Attention**: this way of building on Windows is not well tested yet. We suspect that there might be some issues related to building truly 64-bit binaries.
 
 Data sets
 -----------------------
@@ -94,7 +168,7 @@ Data sets
 We use several data sets, which were created either by other folks,
 or using 3d party software. If you use these data sets, please, consider
 giving proper credit. The download scripts prints respective BibTex entries.
-More information can be found [in the manual](http://arxiv.org/abs/1508.05470).
+More information can be found [in the manual](manual/manual.pdf).
 
 Here is the list of scripts to download major data sets:
 * Data sets for our NIPS'13 and SISAP'13 papers [data/get_data_nips2013.sh](data/get_data_nips2013.sh).  
@@ -106,24 +180,20 @@ Related publications
 -----------------------
 
 Most important related papers are listed below in the chronological order: 
-
-
-* Bilegsaikhan, N., Boytsov, L. 2015 [Permutation Search Methods are Efficient, Yet Faster Search is Possible](http://boytsov.info/pubs/p2332-naidan-arxiv.pdf) PVLDB, 8(12):1618–1629, 2015 [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/journals/corr/NaidanBN15)
+* L. Boytsov, D. Novak, Y. Malkov, E. Nyberg  (2016). [Off the Beaten Path: Let’s Replace Term-Based Retrieval
+with k-NN Search.](http://boytsov.info/pubs/cikm2016.pdf) In proceedings of CIKM'16. [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/conf/cikm/BoytsovNMN16) We use a special branch of this library, plus [the following Java code](https://github.com/oaqa/knn4qa/tree/cikm2016).
+* Malkov, Y.A., Yashunin, D.A.. (2016). [Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs. CoRR](http://arxiv.org/abs/1603.09320), abs/1603.09320. [**[BibTex]**](http://adsabs.harvard.edu/cgi-bin/nph-bib_query?bibcode=2016arXiv160309320M&data_type=BIBTEX&db_key=PRE&nocookieset=1)
+* Bilegsaikhan, N., Boytsov, L. 2015 [Permutation Search Methods are Efficient, Yet Faster Search is Possible](http://boytsov.info/pubs/p2332-naidan-arxiv.pdf) PVLDB, 8(12):1618--1629, 2015 [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/journals/corr/NaidanBN15)
 * Ponomarenko, A., Averlin, N., Bilegsaikhan, N., Boytsov, L., 2014. [Comparative Analysis of Data Structures for Approximate Nearest Neighbor Search.](http://boytsov.info/pubs/da2014.pdf) [**[BibTex]**](http://scholar.google.com/scholar.bib?q=info:yOjNiT2Ql4AJ:scholar.google.com/&output=citation&hl=en&ct=citation&cd=0)
 * Malkov, Y., Ponomarenko, A., Logvinov, A., & Krylov, V., 2014. [Approximate nearest neighbor algorithm based on navigable small world graphs.](http://www.sciencedirect.com/science/article/pii/S0306437913001300) Information Systems, 45, 61-68. [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/journals/is/MalkovPLK14)
 * Boytsov, L., Bilegsaikhan, N., 2013. [Engineering Efficient and Effective Non-Metric Space Library.](http://boytsov.info/pubs/sisap2013.pdf)   In Proceedings of the 6th International Conference on Similarity Search and Applications (SISAP 2013). [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/conf/sisap/BoytsovN13)  
 * Boytsov, L., Bilegsaikhan, N., 2013. [Learning to Prune in Metric and Non-Metric Spaces.](http://boytsov.info/pubs/nips2013.pdf)   In Advances in Neural Information Processing Systems 2013. [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/conf/nips/BoytsovN13)
+* Tellez, Eric Sadit, Edgar Chávez, and Gonzalo Navarro. [Succinct nearest neighbor search.](http://www.dcc.uchile.cl/~gnavarro/ps/is12.pdf) Information Systems 38.7 (2013): 1019-1030. [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/journals/is/TellezCN13)
+* A. Ponomarenko, Y. Malkov, A. Logvinov, , and V. Krylov  [Approximate nearest
+neighbor search small world approach.](http://www.iiis.org/CDs2011/CD2011IDI/ICTA_2011/Abstract.asp?myurl=CT175ON.pdf) ICTA 2011 
 * Dong, Wei, Charikar Moses, and Kai Li. 2011. [Efficient k-nearest neighbor graph construction for generic similarity measures.](http://wwwconference.org/proceedings/www2011/proceedings/p577.pdf) Proceedings of the 20th international conference on World wide web. ACM, 2011.
 [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/conf/mir/DongWCL12)
-* Tellez, Eric Sadit, Edgar Chávez, and Gonzalo Navarro. [Succinct nearest neighbor search.](http://www.dcc.uchile.cl/~gnavarro/ps/is12.pdf) Information Systems 38.7 (2013): 1019-1030. [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/journals/is/TellezCN13)
 * L. Cayton, 2008 [Fast nearest neighbor retrieval for bregman divergences.](http://lcayton.com/bbtree.pdf) Twenty-Fifth International Conference on Machine Learning (ICML). [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/conf/icml/Cayton08)
-* Amato, Giuseppe, Claudio Gennaro, and Pasquale Savino. Mi-file: using inverted files for scalable approximate similarity search. Multimedia tools and applications 71.3 (2014): 1333-1362. [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/conf/infoscale/AmatoS08)
+* Amato, Giuseppe, and Pasquale Savino. 2008 Approximate similarity search in metric spaces using inverted files. [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/conf/infoscale/AmatoS08)
 * Gonzalez, Edgar Chavez, Karina Figueroa, and Gonzalo Navarro. [Effective proximity retrieval by ordering permutations.](http://www.dcc.uchile.cl/~gnavarro/ps/tpami07.pdf) Pattern Analysis and Machine Intelligence, IEEE Transactions on 30.9 (2008): 1647-1658. [**[BibTex]**](http://dblp.uni-trier.de/rec/bibtex/journals/pami/ChavezFN08)
-
-We **are** aware of other (numerous) papers on building and querying k-NN graphs (proximity graphs). In our library, we are currently using only two graph construction algorithms (see links below):
-
-* The search-based construction algorithm published by Malkov et al. in 2014 (also presented at SISAP 2012);
-* The NN-Descent algorithm due to Dong et al. 2011. This first version came without a search algorithm. Therefore, we use the same search algorithm as Malkov et al. 2014. A newer version of NN-descent can be found [by following this link](http://www.kgraph.org/). It is not incorporated, though.
-
-
 

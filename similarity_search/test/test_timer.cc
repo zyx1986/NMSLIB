@@ -13,7 +13,7 @@
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) && !defined(__APPLE__)
 
 #include <sys/time.h>
 
@@ -22,6 +22,8 @@
 #include "bunit.h"
 
 namespace similarity {
+
+const unsigned TIMER_ERR_TOL = 200;
 
 /*
  * These test is intended to run only on Unix-like systems.
@@ -74,7 +76,7 @@ TEST(TestTimer) {
 
   LOG(LIB_INFO) << "Timer: " << z.elapsed() << " : " << oldz.elapsed();
   // We expect both timers to differ in at most 0.1 ms
-  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < 100, true);
+  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < TIMER_ERR_TOL, true);
 
   BurnCPU();
   oldz.split();
@@ -82,7 +84,7 @@ TEST(TestTimer) {
 
   LOG(LIB_INFO) << "Timer: " << z.elapsed() << " : " << oldz.elapsed();
   // We expect both timers to differ in at most 0.1 ms
-  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < 100, true);
+  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < TIMER_ERR_TOL, true);
 
   z.reset();
   oldz.reset();
@@ -93,7 +95,7 @@ TEST(TestTimer) {
 
   LOG(LIB_INFO) << "Timer: " << z.elapsed() << " : " << oldz.elapsed();
   // We expect both timers to differ in at most 0.1 ms
-  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < 100, true);
+  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < TIMER_ERR_TOL, true);
 }
 
 }  // namespace similarity

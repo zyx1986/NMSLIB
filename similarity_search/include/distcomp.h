@@ -7,7 +7,7 @@
  * For the complete list of contributors and further details see:
  * https://github.com/searchivarius/NonMetricSpaceLib 
  * 
- * Copyright (c) 2014
+ * Copyright (c) 2016
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
@@ -23,7 +23,10 @@
 #include <cstdlib>
 #include <limits>
 
+#include <portable_popcount.h>
+
 #include "permutation_type.h"
+#include "idtype.h"
 
 namespace similarity {
 
@@ -64,14 +67,30 @@ template <class T> T AngularDistance(const T *p1, const T *p2, size_t qty);
 template <class T> T CosineSimilarity(const T *p1, const T *p2, size_t qty);
 // Scalar product divided by vector Euclidean norms
 template <class T> T NormScalarProduct(const T *p1, const T *p2, size_t qty);
+// Sclar product divided by query vector Euclidean norm
+// Query is the second argument (by convention we use only left queries, where a data point is the left argument)
+// We don't have a SIMD version for QueryNormScalarProduct function yet.
+template <class T> T QueryNormScalarProduct(const T *p1, const T *p2, size_t qty);
 template <class T> T NormScalarProductSIMD(const T *p1, const T *p2, size_t qty);
 
 // Scalar product that is not normalized 
 template <class T> T ScalarProduct(const T *p1, const T *p2, size_t qty);
 template <class T> T ScalarProductSIMD(const T *p1, const T *p2, size_t qty);
 
-// Fast scalar product between sparse vectors (using SIMD)
-float ScalarProductFast(const char* pData1, size_t len1, const char* pData2, size_t len2);
+// Fast normalized-scalar product between sparse vectors (using SIMD)
+float NormSparseScalarProductFast(const char* pData1, size_t len1, const char* pData2, size_t len2);
+/*
+ * Fast query-side normalized-scalar product between sparse vectors (using SIMD).
+ * By our standard convention of using left queries, the query is the right argument.
+ */
+float QueryNormSparseScalarProductFast(const char* pData, size_t lenData, const char* pQuery, size_t lenQuery);
+// Fast scalar product between sparse vectors without normalization (using SIMD)
+float SparseScalarProductFast(const char* pData1, size_t len1, const char* pData2, size_t len2);
+
+/*
+ * Sometimes due to rounding errors, we get values > 1 or < -1.
+ * This throws off other functions that use scalar product, e.g., acos
+ */
 
 /*
  *  Itakura-Saito distance
@@ -168,6 +187,27 @@ template <typename T> T LPGenericDistance(const T* x, const T* y, const int leng
 
 template <typename T> T LPGenericDistanceOptim(const T* x, const T* y, const int length, const T p);
 
+/*
+ * Various less-standard divergences
+ */
+
+/*
+ * Alpha-beta divergence.
+ * 
+ * Póczos, Barnabás, Liang Xiong, Dougal J. Sutherland, and Jeff Schneider (2012). “Nonparametric kernel
+ * estimators for image classification”. In: Computer Vision and Pattern Recognition (CVPR), 2012 IEEE
+ * Conference on, pages 2989–2996
+ */
+template <typename T> T alpha_beta_divergence(const T* x, const T* y, const int length, float alpha, float beta);
+// A proxy function for alpha-beta divergence that may be used during indexing
+template <typename T> T alpha_beta_divergence_proxy(const T* x, const T* y, const int length, float alpha, float beta);
+/*
+ * Renyi divergence.
+ * Rényi, Alfréd (1961). "On measures of information and entropy". 
+ * Proceedings of the fourth Berkeley Symposium on Mathematics, Statistics and Probability 1960. pp. 547–561. 
+ */
+template <typename T> T renyi_divergence(const T* x, const T* y, const int length, float alpha);
+
 
 /*
  * Rank correlations
@@ -182,9 +222,6 @@ int SpearmanRhoSIMD(const PivotIdType* x, const PivotIdType* y, size_t qty);
 
 //unsigned BitHamming(const uint32_t* a, const uint32_t* b, size_t qty);
 
-#include "simdutils.h"
-
-
 unsigned inline BitHamming(const uint32_t* a, const uint32_t* b, size_t qty) {
   unsigned res = 0;
 
@@ -194,6 +231,18 @@ unsigned inline BitHamming(const uint32_t* a, const uint32_t* b, size_t qty) {
   }
 
   return res;
+}
+
+// Returns the size of the intersection
+unsigned IntersectSizeScalarFast(const IdType *pArr1, size_t qty1, const IdType *pArr2, size_t qty2);
+unsigned IntersectSizeScalarStand(const IdType *pArr1, size_t qty1, const IdType *pArr2, size_t qty2);
+unsigned IntersectSizeScalar3way(const IdType *pArr1, size_t qty1, const IdType *pArr2, size_t qty2, const IdType* pArr3, size_t qty3);
+
+inline float JaccardSparse(const IdType *pArr1, size_t qty1, const IdType *pArr2, size_t qty2) {
+  if (!qty1 || !qty2) return 0; // let's say it's perfect overlap
+  unsigned qtyInter = IntersectSizeScalarFast(pArr1, qty1, pArr2, qty2);
+  float    qtyS = qty1 + qty2;
+  return 1 - qtyInter/(qtyS - qtyInter);
 }
 
 }

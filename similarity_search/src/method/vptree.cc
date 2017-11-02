@@ -20,6 +20,10 @@
 #include <string>
 #include <cmath>
 
+// This is only for _mm_prefetch
+#include <mmintrin.h>
+
+#include "portable_simd.h"
 #include "space.h"
 #include "rangequery.h"
 #include "knnquery.h"
@@ -27,6 +31,9 @@
 #include "method/vptree.h"
 #include "method/vptree_utils.h"
 #include "methodfactory.h"
+
+#define MIN_PIVOT_SELECT_DATA_QTY 10
+#define MAX_PIVOT_SELECT_ATTEMPTS 5
 
 namespace similarity {
 
@@ -36,44 +43,55 @@ using std::endl;
 using std::cout;
 using std::cerr;
     
-
 template <typename dist_t, typename SearchOracle>
 VPTree<dist_t, SearchOracle>::VPTree(
                        bool  PrintProgress,
-                       const Space<dist_t>* space,
+                       Space<dist_t>& space,
                        const ObjectVector& data,
-                       const AnyParams& MethParams,
                        bool use_random_center) : 
+                              space_(space),
+                              data_(data),
+                              PrintProgress_(PrintProgress),
+                              use_random_center_(use_random_center),
+                              max_pivot_select_attempts_(MAX_PIVOT_SELECT_ATTEMPTS),
                               oracle_(space, data, PrintProgress),
-                              BucketSize_(50),
-                              MaxLeavesToVisit_(FAKE_MAX_LEAVES_TO_VISIT),
-                              ChunkBucket_(true)
-                       {
-  AnyParamManager pmgr(MethParams);
+                              QueryTimeParams_(oracle_.GetQueryTimeParamNames()) { 
+                                QueryTimeParams_.push_back("maxLeavesToVisit");
+                              }
 
-  pmgr.GetParamOptional("bucketSize", BucketSize_);
-  pmgr.GetParamOptional("chunkBucket", ChunkBucket_);
+template <typename dist_t, typename SearchOracle>
+void VPTree<dist_t, SearchOracle>::CreateIndex(const AnyParams& IndexParams) {
+  AnyParamManager pmgr(IndexParams);
 
-  LOG(LIB_INFO) << "bucketSize  = " << BucketSize_;
-  LOG(LIB_INFO) << "chunkBucket = " << ChunkBucket_;
+  pmgr.GetParamOptional("bucketSize", BucketSize_, 50);
+  pmgr.GetParamOptional("chunkBucket", ChunkBucket_, true);
+  pmgr.GetParamOptional("selectPivotAttempts", max_pivot_select_attempts_, MAX_PIVOT_SELECT_ATTEMPTS);
+
+  CHECK_MSG(max_pivot_select_attempts_ >= 1, "selectPivotAttempts should be >=1");
+
+  LOG(LIB_INFO) << "bucketSize          = " << BucketSize_;
+  LOG(LIB_INFO) << "chunkBucket         = " << ChunkBucket_;
+  LOG(LIB_INFO) << "selectPivotAttempts = " << max_pivot_select_attempts_;
 
   // Call this function *ONLY AFTER* the bucket size is obtained!
-  VPTree<dist_t,SearchOracle>::SetQueryTimeParamsInternal(pmgr);
+  oracle_.SetIndexTimeParams(pmgr);
+  oracle_.LogParams();
 
   pmgr.CheckUnused();
 
-  oracle_.LogParams();
+  this->ResetQueryTimeParams(); // reset query-time parameters
 
-  unique_ptr<ProgressDisplay>   progress_bar(PrintProgress ? 
-                                              new ProgressDisplay(data.size(), cerr):
+  unique_ptr<ProgressDisplay>   progress_bar(PrintProgress_ ? 
+                                              new ProgressDisplay(data_.size(), cerr):
                                               NULL);
 
-  root_ = new VPNode(0,
+  root_.reset(new VPNode(0,
                      progress_bar.get(), 
-                     oracle_, space,
-                     const_cast<ObjectVector&>(data),
+                     oracle_, 
+                     space_, data_,
+                     max_pivot_select_attempts_,
                      BucketSize_, ChunkBucket_,
-                     use_random_center, true);
+                     use_random_center_ /* use random center */));
 
   if (progress_bar) { // make it 100%
     (*progress_bar) += (progress_bar->expected_count() - progress_bar->count());
@@ -82,22 +100,21 @@ VPTree<dist_t, SearchOracle>::VPTree(
 
 template <typename dist_t,typename SearchOracle>
 VPTree<dist_t, SearchOracle>::~VPTree() {
-  delete root_;
 }
 
 template <typename dist_t,typename SearchOracle>
-const std::string VPTree<dist_t, SearchOracle>::ToString() const {
+const std::string VPTree<dist_t, SearchOracle>::StrDesc() const {
   return "vptree: " + SearchOracle::GetName();
 }
 
 template <typename dist_t, typename SearchOracle>
-void VPTree<dist_t, SearchOracle>::Search(RangeQuery<dist_t>* query) {
+void VPTree<dist_t, SearchOracle>::Search(RangeQuery<dist_t>* query, IdType) const {
   int mx = MaxLeavesToVisit_;
   root_->GenericSearch(query, mx);
 }
 
 template <typename dist_t, typename SearchOracle>
-void VPTree<dist_t, SearchOracle>::Search(KNNQuery<dist_t>* query) {
+void VPTree<dist_t, SearchOracle>::Search(KNNQuery<dist_t>* query, IdType) const {
   int mx = MaxLeavesToVisit_;
   root_->GenericSearch(query, mx);
 }
@@ -119,13 +136,14 @@ VPTree<dist_t, SearchOracle>::VPNode::VPNode(
                                unsigned level,
                                ProgressDisplay* progress_bar,
                                const SearchOracle& oracle,
-                               const Space<dist_t>* space, const ObjectVector& data,
+                               const Space<dist_t>& space, const ObjectVector& data,
+                               size_t max_pivot_select_attempts,
                                size_t BucketSize, bool ChunkBucket,
-                               bool use_random_center, bool is_root)
+                               bool use_random_center)
     : oracle_(oracle),
       pivot_(NULL), mediandist_(0),
       left_child_(NULL), right_child_(NULL),
-      bucket_(NULL), CacheOptimizedBucket_(NULL) 
+      bucket_(NULL), CacheOptimizedBucket_(NULL)
 {
   CHECK(!data.empty());
 
@@ -134,20 +152,42 @@ VPTree<dist_t, SearchOracle>::VPNode::VPNode(
     return;
   }
 
-  const size_t index = SelectVantagePoint(data, use_random_center);
-  pivot_ = data[index];
 
   if (data.size() >= 2) {
-    DistObjectPairVector<dist_t> dp;
-    for (size_t i = 0; i < data.size(); ++i) {
-      if (i == index) {
-        continue;
+    unsigned bestDP = 0;
+    float    largestSIGMA = 0;
+    vector<DistObjectPairVector<dist_t>> dpARR(max_pivot_select_attempts);
+
+    // To compute StdDev we need at least 2 points not counting the pivot
+    size_t maxAtt = data.size() >= max(3, MIN_PIVOT_SELECT_DATA_QTY) ? max_pivot_select_attempts : 1;
+
+    vector<double> dists(data.size());
+    for (size_t att = 0; att < maxAtt; ++att) {
+      dpARR[att].reserve(data.size());
+      const size_t  currPivotIndex = SelectVantagePoint(data, use_random_center);
+      const Object* pCurrPivot = data[currPivotIndex];
+      for (size_t i = 0; i < data.size(); ++i) {
+        if (i == currPivotIndex) {
+          continue;
+        }
+        // Distance can be asymmetric, the pivot is always on the left side!
+        dist_t d = space.IndexTimeDistance(pCurrPivot, data[i]);
+        dists[i] = d;
+        dpARR[att].emplace_back(d, data[i]);
       }
-      // Distance can be asymmetric, the pivot is always on the left side!
-      dp.push_back(std::make_pair(space->IndexTimeDistance(pivot_, data[i]), data[i]));
+
+      double sigma = StdDev(&dists[0], dists.size());
+      if (att == 0 || sigma > largestSIGMA) {
+        //LOG(LIB_INFO) << " ### " << largestSIGMA << " -> "  << sigma << " att=" << att << " data.size()=" << data.size();
+        largestSIGMA = sigma;
+        bestDP = att;
+        pivot_ = pCurrPivot;
+        std::sort(dpARR[att].begin(), dpARR[att].end(), DistObjectPairAscComparator<dist_t>());
+      }
     }
 
-    std::sort(dp.begin(), dp.end(), DistObjectPairAscComparator<dist_t>());
+
+    DistObjectPairVector<dist_t>& dp = dpARR[bestDP];
     DistObjectPair<dist_t>  medianDistObj = GetMedian(dp);
     mediandist_ = medianDistObj.first; 
 
@@ -183,12 +223,15 @@ VPTree<dist_t, SearchOracle>::VPNode::VPNode(
     }
 
     if (!left.empty()) {
-      left_child_ = new VPNode(level + 1, progress_bar, oracle_, space, left, BucketSize, ChunkBucket, use_random_center, false);
+      left_child_ = new VPNode(level + 1, progress_bar, oracle_, space, left, max_pivot_select_attempts, BucketSize, ChunkBucket, use_random_center);
     }
 
     if (!right.empty()) {
-      right_child_ = new VPNode(level + 1, progress_bar, oracle_, space, right, BucketSize, ChunkBucket, use_random_center, false);
+      right_child_ = new VPNode(level + 1, progress_bar, oracle_, space, right, max_pivot_select_attempts, BucketSize, ChunkBucket, use_random_center);
     }
+  } else {
+    CHECK_MSG(data.size() == 1, "Bug: expect the subset to contain exactly one element!");
+    pivot_ = data[0];
   }
 }
 
@@ -202,10 +245,14 @@ VPTree<dist_t, SearchOracle>::VPNode::~VPNode() {
 template <typename dist_t, typename SearchOracle>
 template <typename QueryType>
 void VPTree<dist_t, SearchOracle>::VPNode::GenericSearch(QueryType* query,
-                                                         int& MaxLeavesToVisit) {
+                                                         int& MaxLeavesToVisit) const {
   if (MaxLeavesToVisit <= 0) return; // early termination
   if (bucket_) {
     --MaxLeavesToVisit;
+
+    if (CacheOptimizedBucket_) {
+      _mm_prefetch(CacheOptimizedBucket_, _MM_HINT_T0);
+    }
 
     for (unsigned i = 0; i < bucket_->size(); ++i) {
       const Object* Obj = (*bucket_)[i];

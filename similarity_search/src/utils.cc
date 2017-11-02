@@ -50,7 +50,7 @@ const char* GetFileName(const char* fullpath) {
   return fullpath;
 }
 
-bool DoesFileExist(const char* filename) {
+bool DoesFileExist(const char *filename) {
 #ifdef _MSC_VER
   return _access(filename, F_OK) == 0;
 #else
@@ -63,31 +63,6 @@ void RStrip(char* str) {
   while ((i >= 0) &&
          (str[i] == '\r' || str[i] == '\n' || str[i] == ' ' || str[i] == '\t'))
     str[i--] = '\0';
-}
-
-double Mean(const double* array, const unsigned size) {
-  double result = 0.0;
-  for (unsigned i = 0; i < size; ++i)
-    result += array[i];
-  return result / size;
-}
-
-double Variance(const double* array, const unsigned size, const double mean) {
-  double result = 0.0;
-  CHECK(size > 1);
-  for (unsigned i = 0; i < size; ++i) {
-    double diff = (mean - array[i]);
-    result += diff * diff; 
-  }
-  return result / size;
-}
-
-double Variance(const double* array, const unsigned size) {
-  return Variance(array, size, Mean(array, size));
-}
-
-double StdDev(const double* array, const unsigned size) {
-  return sqrt(Variance(array, size));
 }
 
 // This macro does two things: (a) specialization (b) instantiation
@@ -141,7 +116,6 @@ inline bool ApproxEqualOther(const T& x, const T& y, unsigned maxUlps) {
 }
 
 template <> bool ApproxEqual<long double>(const long double& x, const long double& y, unsigned maxUlps) {
-  if (ISNAN(x) || ISNAN(y)) return false;\
   const long double thresh = 2*numeric_limits<long double>::min();\
   return ApproxEqualOther(x, y, maxUlps) || (std::max(x,y) < thresh && std::min(x,y) > -thresh);\
 };\

@@ -33,24 +33,27 @@
 
 #define SPACE_COSINE_SIMILARITY  "cosinesimil"
 #define SPACE_ANGULAR_DISTANCE   "angulardist"
+#define SPACE_NEGATIVE_SCALAR    "negdotprod"
 
 namespace similarity {
 
 template <typename dist_t>
 class SpaceCosineSimilarity : public VectorSpaceSimpleStorage<dist_t> {
 public:
-  virtual std::string ToString() const {
+  SpaceCosineSimilarity() {}
+  virtual std::string StrDesc() const {
     return "CosineSimilarity";
   }
 protected:
-  virtual Space<dist_t>* HiddenClone() const { return new SpaceCosineSimilarity<dist_t>(); } // no parameters 
   virtual dist_t HiddenDistance(const Object* obj1, const Object* obj2) const;
+  DISABLE_COPY_AND_ASSIGN(SpaceCosineSimilarity);
 };
 
 template <typename dist_t>
 class SpaceAngularDistance : public VectorSpaceSimpleStorage<dist_t> {
 public:
-  virtual std::string ToString() const {
+  SpaceAngularDistance() {}
+  virtual std::string StrDesc() const {
     return "AngularDistance";
   }
   virtual size_t GetElemQty(const Object* object) const {
@@ -63,8 +66,29 @@ public:
   }
 
 protected:
-  virtual Space<dist_t>* HiddenClone() const { return new SpaceAngularDistance<dist_t>(); } // no parameters 
   virtual dist_t HiddenDistance(const Object* obj1, const Object* obj2) const;
+  DISABLE_COPY_AND_ASSIGN(SpaceAngularDistance);
+};
+
+template <typename dist_t>
+class SpaceNegativeScalarProduct : public VectorSpaceSimpleStorage<dist_t> {
+public:
+  SpaceNegativeScalarProduct() {}
+  virtual std::string StrDesc() const {
+    return SPACE_NEGATIVE_SCALAR;
+  }
+  virtual size_t GetElemQty(const Object* object) const {
+    return object->datalength()/ sizeof(dist_t);
+  }
+  virtual void createVectFromObj(const Object* obj, dist_t* pDstVect,
+                                 size_t nElem) const {
+    return VectorSpace<dist_t>::
+                CreateVectFromObjSimpleStorage(__func__, obj, pDstVect, nElem);
+  }
+
+protected:
+  virtual dist_t HiddenDistance(const Object* obj1, const Object* obj2) const;
+  DISABLE_COPY_AND_ASSIGN(SpaceNegativeScalarProduct);
 };
 
 

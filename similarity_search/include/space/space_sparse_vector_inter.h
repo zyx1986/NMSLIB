@@ -20,9 +20,11 @@
 #include <cstdint>
 #include <string>
 #include <map>
+#include <cmath>
 #include <stdexcept>
 #include <algorithm>
 #include <limits>
+#include <vector>
 
 #include <string.h>
 #include "global.h"
@@ -35,6 +37,35 @@
 namespace similarity {
 
 using std::vector;
+
+struct OverlapInfo {
+  uint32_t  overlap_qty_ = 0; // The number of shared dimension, i.e., a vectors' overlap
+  // The dot product of elements from the overlap, normalized by vector norms,
+  // it is also equal to 1 - cosine distance
+  float     overlap_dotprod_norm_ = 0;
+
+  // Overlap statistics for the left vector (left argument of the cosine distance)
+  float     overlap_sum_left_ = 0;  // The sum of elements from the overlap 
+  float     overlap_mean_left_ = 0; // The sample mean of elements from the overlap
+  float     overlap_std_left_ = 0;  // The sample standard deviation of elements from the overlap
+
+  // Difference statistics for the left vector (left argument of the cosine)
+  float     diff_sum_left_ = 0;    // The sum of elements for the left vector dimensions NOT in the overlap 
+  float     diff_mean_left_ = 0;   // The sample mean of ...
+  float     diff_std_left_ = 0;    // The sample standard deviation of ...
+
+  // Overlap statistics for the right vector (right argument of the cosine distance)
+  // Naming conventions are identical to those for the left vector
+  float     overlap_sum_right_ = 0;
+  float     overlap_mean_right_ = 0;
+  float     overlap_std_right_ = 0;
+
+  // Difference statistics for the right vector (right argument of the cosine)
+  // Naming conventions are identical to those for the left vector
+  float     diff_sum_right_ = 0;
+  float     diff_mean_right_ = 0;
+  float     diff_std_right_ = 0;
+};
 
 /*
  *
@@ -50,23 +81,25 @@ using std::vector;
 template <typename dist_t>
 class SpaceSparseVectorInter : public SpaceSparseVector<dist_t> {
  public:
+  explicit SpaceSparseVectorInter(){}
   typedef SparseVectElem<dist_t> ElemType;
 
-  virtual void CreateVectFromObj(const Object* obj, dist_t* pVect,
-                                 size_t nElem) const;
-  /*
-   * Overriding the function from the base class
-   */
-  virtual dist_t ScalarProduct(const Object* obj1, const Object* obj2) const {
-    CHECK(obj1->datalength() > 0);
-    CHECK(obj2->datalength() > 0);
-
-    return ScalarProductFast(obj1->data(), obj1->datalength(),
-                             obj2->data(), obj2->datalength());
-  }
+  virtual void CreateDenseVectFromObj(const Object* obj, dist_t* pVect,
+                                     size_t nElem) const;
   virtual Object* CreateObjFromVect(IdType id, LabelType label, const vector<ElemType>& InpVect) const;
+  virtual void CreateVectFromObj(const Object* obj, vector<ElemType>& v) const ;
+
+  virtual size_t GetElemQty(const Object* object) const;
+
+  size_t ComputeOverlap(const Object* pObj1, const Object* pObj2) const;
+  size_t ComputeOverlap(const Object* pObj1, const Object* pObj2, const Object* pObj3) const;
+
+  static OverlapInfo ComputeOverlapInfo(const Object* pObj1, const Object* pObj2);
+  static OverlapInfo ComputeOverlapInfo(const vector<SparseVectElem<dist_t>>& elemsA, 
+                                 const vector<SparseVectElem<dist_t>>& elemsB);
  protected:
-  virtual Space<dist_t>* HiddenClone() const = 0;
+  DISABLE_COPY_AND_ASSIGN(SpaceSparseVectorInter);
+
   virtual dist_t HiddenDistance(const Object* obj1, const Object* obj2) const = 0;
 };
 
@@ -120,6 +153,7 @@ template <typename dist_t>
 inline  void ParseSparseElementHeader(const char*     pBuff, 
                                       size_t&         rBlockQty,
                                       dist_t&         rSqSum,
+                                      float&          rNormCoeff,
                                       const size_t*&  rpBlockQtys,
                                       const size_t*&  rpBlockOffs, 
                                       const char*&    rpBlockBegin) {
@@ -127,7 +161,9 @@ inline  void ParseSparseElementHeader(const char*     pBuff,
   rBlockQty = *pQty;
   const dist_t*   pSqSum = reinterpret_cast<const dist_t*>(pQty + 1);
   rSqSum = *pSqSum;
-  rpBlockQtys = reinterpret_cast<const size_t*>(pSqSum + 1);
+  const float* pNormCoeff = reinterpret_cast<const float*>(pSqSum + 1);
+  rNormCoeff = *pNormCoeff;
+  rpBlockQtys = reinterpret_cast<const size_t*>(pNormCoeff + 1);
   rpBlockOffs = rpBlockQtys + rBlockQty;
 
   rpBlockBegin = reinterpret_cast<const char*>(rpBlockOffs + rBlockQty);
@@ -139,14 +175,18 @@ inline  void UnpackSparseElements(const char* pBuff, size_t dataLen,
 {
   typedef SparseVectElem<dist_t> ElemType;
 
+  OutVect.clear(); // just in case
+
   size_t            blockQty = 0;
   dist_t            SqSum = 0;
+  float             normCoeff = 0;
   const size_t*     pBlockQty = NULL;
   const size_t*     pBlockOff = NULL;
 
   const char* pBlockBegin = NULL;
 
-  ParseSparseElementHeader(pBuff, blockQty, SqSum, 
+  ParseSparseElementHeader(pBuff, blockQty,
+                           SqSum, normCoeff,
                            pBlockQty, 
                            pBlockOff, 
                            pBlockBegin);
@@ -223,6 +263,7 @@ inline  void PackSparseElements(const vector<SparseVectElem<dist_t>>& InpVect,
   size_t elemSize = 2 + sizeof(dist_t);
   dataSize = sizeof(size_t) + // number of blocks
               sizeof(dist_t) + // sum of squared elements
+              sizeof(float) + // (sum of squared elements)^(-0.5)
               2 * sizeof(size_t) * (blocks.size()) + // block qtys & offsets
               elemSize * InpVect.size();  
 
@@ -237,7 +278,9 @@ inline  void PackSparseElements(const vector<SparseVectElem<dist_t>>& InpVect,
 
   dist_t*   pSqSum = reinterpret_cast<dist_t*>(pQty + 1);
   *pSqSum = sqSum;
-  size_t*   pBlockQtyOff = reinterpret_cast<size_t*>(pSqSum + 1);
+  float*    pNormCoeff = reinterpret_cast<float*>(pSqSum + 1);
+  *pNormCoeff = 1.0f/sqrt(static_cast<float>(sqSum));
+  size_t*   pBlockQtyOff = reinterpret_cast<size_t*>(pNormCoeff + 1);
 
   for (size_t i = 0; i < blocks.size(); ++i) {
     *pBlockQtyOff++ = blocks[i].size(); // qty

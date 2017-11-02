@@ -5,8 +5,8 @@
  * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
+ * https://github.com/searchivarius/NonMetricSpaceLib
+ *
  * Copyright (c) 2014
  *
  * This code is released under the
@@ -21,33 +21,25 @@
 
 #include "utils.h"
 #include "params_cmdline.h"
+#include "params_def.h"
 #include "logging.h"
 #include "space.h"
+#include "cmd_options.h"
 
 #include <cmath>
-#include <boost/program_options.hpp>
-
-using namespace std;
 
 namespace similarity {
 
 using std::multimap;
 using std::string;
 
-namespace po = boost::program_options;
-
-static void Usage(const char *prog,
-                  const po::options_description& desc) {
-    std::cout << prog << std::endl
-              << desc << std::endl;
-}
-
-void ParseCommandLine(int argc, char*argv[],
+void ParseCommandLine(int argc, char* argv[], bool& bPrintProgress,
                       string&                 LogFile,
+                      string&                 LoadIndexLoc,
+                      string&                 SaveIndexLoc,
                       string&                 DistType,
                       string&                 SpaceType,
                       shared_ptr<AnyParams>&  SpaceParams,
-                      unsigned&               dimension,
                       unsigned&               ThreadTestQty,
                       bool&                   AppendToResFile,
                       string&                 ResFilePrefix,
@@ -55,105 +47,129 @@ void ParseCommandLine(int argc, char*argv[],
                       string&                 DataFile,
                       string&                 QueryFile,
                       string&                 CacheGSFilePrefix,
-                      size_t&                 maxCacheGSQty,
+                      float&                  maxCacheGSRelativeQty,
+                      bool&                   recallOnly,
                       unsigned&               MaxNumData,
                       unsigned&               MaxNumQuery,
                       vector<unsigned>&       knn,
                       float&                  eps,
                       string&                 RangeArg,
-                      vector<shared_ptr<MethodWithParams>>& pars) {
+                      string&                 MethodName,
+                      shared_ptr<AnyParams>&          IndexTimeParams,
+                      vector<shared_ptr<AnyParams>>&  QueryTimeParams) {
   knn.clear();
   RangeArg.clear();
-  pars.clear();
+  QueryTimeParams.clear();
 
-  vector<string>  methParams;
+  string          indexTimeParamStr;
+  vector<string>  vQueryTimeParamStr;
+  string          spaceParamStr;
   string          knnArg;
   // Conversion to double is due to an Intel's bug with __builtin_signbit being undefined for float
   double          epsTmp;
 
-  po::options_description ProgOptDesc("Allowed options");
-  ProgOptDesc.add_options()
-    ("help,h", "produce help message")
-    ("spaceType,s",     po::value<string>(&SpaceType)->required(),
-                        "space type, e.g., l1, l2, lp:p=0.5")
-    ("distType",        po::value<string>(&DistType)->default_value(DIST_TYPE_FLOAT),
-                        "distance value type: int, float, double")
-    ("dataFile,i",      po::value<string>(&DataFile)->required(),
-                        "input data file")
-    ("maxNumData",      po::value<unsigned>(&MaxNumData)->default_value(0),
-                        "if non-zero, only the first maxNumData elements are used")
-    ("dimension,d",     po::value<unsigned>(&dimension)->default_value(0),
-                        "optional dimensionality")
-    ("queryFile,q",     po::value<string>(&QueryFile)->default_value(""),
-                        "query file")
-    ("cachePrefixGS",   po::value<string>(&CacheGSFilePrefix)->default_value(""),
-                        "a prefix of gold standard cache files")
-    ("maxCacheGSQty",   po::value<size_t>(&maxCacheGSQty)->default_value(1000),
-                       "a maximum number of gold standard entries to compute/cache")
-    ("logFile,l",       po::value<string>(&LogFile)->default_value(""),
-                        "log file")
-    ("maxNumQuery",     po::value<unsigned>(&MaxNumQuery)->default_value(0),
-                        "if non-zero, use maxNumQuery query elements"
-                        "(required in the case of bootstrapping)")
-    ("testSetQty,b",    po::value<unsigned>(&TestSetQty)->default_value(0),
-                        "# of test sets obtained by bootstrapping;"
-                        " ignored if queryFile is specified")
-    ("knn,k",           po::value< string>(&knnArg),
-                        "comma-separated values of K for the k-NN search")
-    ("range,r",         po::value<string>(&RangeArg),
-                        "comma-separated radii for the range searches")
-    ("eps",             po::value<double>(&epsTmp)->default_value(0.0),
-                        "the parameter for the eps-approximate k-NN search.")
-    ("method,m",        po::value< vector<string> >(&methParams)->multitoken()->zero_tokens(),
-                        "list of method(s) with comma-separated parameters in the format:\n"
-                        "<method name>:<param1>,<param2>,...,<paramK>")
-    ("threadTestQty",   po::value<unsigned>(&ThreadTestQty)->default_value(1),
-                        "# of threads")
-    ("outFilePrefix,o", po::value<string>(&ResFilePrefix)->default_value(""),
-                        "output file prefix")
-    ("appendToResFile", po::value<bool>(&AppendToResFile)->default_value(false),
-                        "do not override information in results files, append new data")
+  bPrintProgress  = true;
 
-    ;
+  bool bSuppressPrintProgress;
 
-  po::variables_map vm;
+  CmdOptions cmd_options;
+
+  cmd_options.Add(new CmdParam(SPACE_TYPE_PARAM_OPT, SPACE_TYPE_PARAM_MSG,
+                               &spaceParamStr, true));
+  cmd_options.Add(new CmdParam(DIST_TYPE_PARAM_OPT, DIST_TYPE_PARAM_MSG,
+                               &DistType, false, DIST_TYPE_FLOAT));
+  cmd_options.Add(new CmdParam(DATA_FILE_PARAM_OPT, DATA_FILE_PARAM_MSG,
+                               &DataFile, true));
+  cmd_options.Add(new CmdParam(MAX_NUM_DATA_PARAM_OPT, MAX_NUM_DATA_PARAM_MSG,
+                               &MaxNumData, false, MAX_NUM_DATA_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(QUERY_FILE_PARAM_OPT, QUERY_FILE_PARAM_MSG,
+                               &QueryFile, false, QUERY_FILE_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(LOAD_INDEX_PARAM_OPT, LOAD_INDEX_PARAM_MSG,
+                               &LoadIndexLoc, false, LOAD_INDEX_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(SAVE_INDEX_PARAM_OPT, SAVE_INDEX_PARAM_MSG,
+                               &SaveIndexLoc, false, SAVE_INDEX_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(CACHE_PREFIX_GS_PARAM_OPT, CACHE_PREFIX_GS_PARAM_MSG,
+                               &CacheGSFilePrefix, false, CACHE_PREFIX_GS_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(MAX_CACHE_GS_QTY_PARAM_OPT, MAX_CACHE_GS_QTY_PARAM_MSG,
+                               &maxCacheGSRelativeQty, false, MAX_CACHE_GS_QTY_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(RECALL_ONLY_PARAM_OPT, RECALL_ONLY_PARAM_MSG,
+                               &recallOnly, false, RECALL_ONLY_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(LOG_FILE_PARAM_OPT, LOG_FILE_PARAM_MSG,
+                               &LogFile, false, LOG_FILE_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(MAX_NUM_QUERY_PARAM_OPT, MAX_NUM_QUERY_PARAM_MSG,
+                               &MaxNumQuery, false, MAX_NUM_QUERY_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(TEST_SET_QTY_PARAM_OPT, TEST_SET_QTY_PARAM_MSG,
+                               &TestSetQty, false, TEST_SET_QTY_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(KNN_PARAM_OPT, KNN_PARAM_MSG,
+                               &knnArg, false));
+  cmd_options.Add(new CmdParam(RANGE_PARAM_OPT, RANGE_PARAM_MSG,
+                               &RangeArg, false));
+  cmd_options.Add(new CmdParam(EPS_PARAM_OPT, EPS_PARAM_MSG,
+                               &epsTmp, false, EPS_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(QUERY_TIME_PARAMS_PARAM_OPT, QUERY_TIME_PARAMS_PARAM_MSG,
+                               &vQueryTimeParamStr, false));
+  cmd_options.Add(new CmdParam(INDEX_TIME_PARAMS_PARAM_OPT, INDEX_TIME_PARAMS_PARAM_MSG,
+                               &indexTimeParamStr, false));
+  cmd_options.Add(new CmdParam(METHOD_PARAM_OPT, METHOD_PARAM_MSG,
+                               &MethodName, false));
+  cmd_options.Add(new CmdParam(THREAD_TEST_QTY_PARAM_OPT, THREAD_TEST_QTY_PARAM_MSG,
+                               &ThreadTestQty, false, THREAD_TEST_QTY_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(OUT_FILE_PREFIX_PARAM_OPT, OUT_FILE_PREFIX_PARAM_MSG,
+                               &ResFilePrefix, false, OUT_FILE_PREFIX_PARAM_DEFAULT));
+  cmd_options.Add(new CmdParam(APPEND_TO_RES_FILE_PARAM_OPT, APPEND_TO_RES_FILE_PARAM_MSG,
+                               &AppendToResFile, false));
+  cmd_options.Add(new CmdParam(NO_PROGRESS_PARAM_OPT, NO_PROGRESS_PARAM_MSG,
+                               &bSuppressPrintProgress, false));
+
   try {
-    po::store(po::parse_command_line(argc, argv, ProgOptDesc), vm);
-    po::notify(vm);
-  } catch (const exception& e) {
-    Usage(argv[0], ProgOptDesc);
+    cmd_options.Parse(argc, argv);
+  } catch (const CmdParserException& e) {
+    cmd_options.ToString();
+    std::cout.flush();
     LOG(LIB_FATAL) << e.what();
+  } catch (const std::exception& e) {
+    cmd_options.ToString();
+    std::cout.flush();
+    LOG(LIB_FATAL) << e.what();
+  } catch (...) {
+    cmd_options.ToString();
+    std::cout.flush();
+    LOG(LIB_FATAL) << "Failed to parse cmd arguments";
   }
+
+  bPrintProgress = !bSuppressPrintProgress;
 
   eps = epsTmp;
 
-  if (vm.count("help")  ) {
-    Usage(argv[0], ProgOptDesc);
-    exit(0);
-  }
-
   ToLower(DistType);
-  ToLower(SpaceType);
-  
+  ToLower(spaceParamStr);
+  ToLower(MethodName);
+
   try {
     {
-      vector<string> SpaceDesc;
-      string str = SpaceType;
-      ParseSpaceArg(str, SpaceType, SpaceDesc);
-      SpaceParams = shared_ptr<AnyParams>(new AnyParams(SpaceDesc));
+      vector<string>     desc;
+      ParseSpaceArg(spaceParamStr, SpaceType, desc);
+      SpaceParams = shared_ptr<AnyParams>(new AnyParams(desc));
     }
 
-    for(const auto s: methParams) {
-      string         MethName;
-      vector<string> MethodDesc;
-      ParseMethodArg(s, MethName, MethodDesc);
-      pars.push_back(shared_ptr<MethodWithParams>(new MethodWithParams(MethName, MethodDesc)));
+    {
+      vector<string>     desc;
+      ParseArg(indexTimeParamStr, desc);
+      IndexTimeParams = shared_ptr<AnyParams>(new AnyParams(desc));
     }
-    if (vm.count("knn")) {
-      if (!SplitStr(knnArg, knn, ',')) {
-        Usage(argv[0], ProgOptDesc);
-        LOG(LIB_FATAL) << "Wrong format of the KNN argument: '" << knnArg;
-      }
+
+    if (vQueryTimeParamStr.empty())
+      vQueryTimeParamStr.push_back("");
+
+    for(const auto s: vQueryTimeParamStr) {
+      vector<string>  desc;
+
+      ParseArg(s, desc);
+      QueryTimeParams.push_back(shared_ptr<AnyParams>(new AnyParams(desc)));
+    }
+
+    if (!knnArg.empty() && !SplitStr(knnArg, knn, ',')) {
+      LOG(LIB_FATAL) << "Wrong format of the KNN argument: '" << knnArg;
     }
 
     if (DataFile.empty()) {
@@ -169,13 +185,16 @@ void ParseCommandLine(int argc, char*argv[],
     }
 
     if (!MaxNumQuery && QueryFile.empty()) {
-      LOG(LIB_FATAL) << "Set a positive # of queries or specify a query file!"; 
+      LOG(LIB_FATAL) << "Set a positive # of queries or specify a query file!";
     }
+
+    CHECK_MSG(MaxNumData < MAX_DATASET_QTY, "The maximum number of points should not exceed" + ConvertToString(MAX_DATASET_QTY));
+    CHECK_MSG(MaxNumQuery < MAX_DATASET_QTY, "The maximum number of queries should not exceed" + ConvertToString(MAX_DATASET_QTY));
   } catch (const exception& e) {
     LOG(LIB_FATAL) << "Exception: " << e.what();
   }
 }
 
-};
+}
 
 
